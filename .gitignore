@@ -104,3 +104,5 @@ data
 
 
 .vscode
+.idea
+neo4j
