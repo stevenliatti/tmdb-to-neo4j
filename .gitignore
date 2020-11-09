@@ -106,3 +106,5 @@ data
 .vscode
 .idea
 neo4j
+.bloop
+metals.sbt

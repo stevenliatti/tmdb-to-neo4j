@@ -7,7 +7,7 @@
 
 package ch.hepia
 
-import ch.hepia.Domain.{Actor, Credits, Genre, Movie, MovieId, MovieMaker, Recommendations, Similar}
+import ch.hepia.Domain.{Actor, Credits, Genre, Movie}
 import spray.json.DefaultJsonProtocol
 
 /**
