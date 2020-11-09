@@ -17,11 +17,7 @@ object JsonFormats  {
   import DefaultJsonProtocol._
 
   implicit val genreFormat = jsonFormat2(Genre)
-  implicit val actorFormat = jsonFormat5(Actor)
-  implicit val crewFormat = jsonFormat4(MovieMaker)
+  implicit val actorFormat = jsonFormat9(Actor)
   implicit val creditFormat = jsonFormat2(Credits)
-  implicit val similarMovieIdFormat = jsonFormat1(MovieId)
-  implicit val similarFormat = jsonFormat1(Similar)
-  implicit val recommendationsFormat = jsonFormat1(Recommendations)
-  implicit val movieFormat = jsonFormat8(Movie)
+  implicit val movieFormat = jsonFormat12(Movie)
 }

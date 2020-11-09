@@ -52,29 +52,82 @@ object Main {
         println("You have to define env variables")
         sys.exit(42)
     }
+    //////////////////////////////////////////############################## Depuis ici
 
     // First step, create constraints on Nodes types
     val movieService = new MovieService(driver.asScala[Future])
+    val actorService = new ActorService(driver.asScala[Future])
+
     println(java.util.Calendar.getInstance.getTime + " Create constraints")
     movieService.createConstraints()
+    actorService.createConstraints()
 
     // Second step, read movies from raw JSON data and keep just the necessary
     println(java.util.Calendar.getInstance.getTime + " Read movies in JSON and make filters")
     val rMovies = movieService.readMoviesFromFile("data/movies.json").toList
-    val movies = rMovies.map(m => {
+    val rActors= actorService.readActorsFromFile("data/actors.json").toList
+
+    val movies = rMovies.map(m => { // Filter actors with a order min in the movie
       val actors = m.credits.cast.filter(a => a.order < actorsByMovie)
-      val movieMakers = m.credits.crew.filter(c => jobsForMovie.contains(c.job))
-      val credits = Credits(actors, movieMakers)
-      Movie(m.id, m.title, m.budget, m.revenue, m.genres, credits, m.similar, m.recommendations)
+      val credits = Credits(actors)
+      Movie(m.id, m.title, m.budget, m.revenue,
+        m.genres, credits, m.backdrop_path, m.poster_path,
+        m.production_countries, m.release_date, m.runtime, m.tagline)
     })
 
+    val actorMap = mutable.Map[Long, Actor]()
+    rActors.foreach(a => { // Creat map of actors, for each id we have the corresponding actor
+      actorMap.put(a.id, a)
+    })
+
+    // Insert all actors in the database
+    println(java.util.Calendar.getInstance.getTime + " Start to add actors nodes")
+    val actorsInsertions = Future.sequence(rActors.map(a => actorService.addActor(a)))
+    Await.result(actorsInsertions, Duration.Inf)
+
+    case class KnownRelation(a1Id: Long, a2Id: Long, movies: List[String])
+    val peopleToPeople = mutable.Map[(Long, Long), KnownRelation]()
+
+    movies.foreach { m =>
+      val actors = m.credits.cast
+      val genres = m.genres // TODO : Que faire avec les genres ?
+
+      // Creat relations between actors by his ID
+      for { // TODO: Qu'en penses-tu ? => ca nous crée une map avec pour chaque know entre actor les id et la liste des films qui les lie
+        a1 <- actors
+        a2 <- actors
+      } yield {
+        if(a1.id != a2.id) {
+          if (peopleToPeople.contains((a1.id, a2.id))) {
+            val movies: List[String] = peopleToPeople((a1.id, a2.id)).movies
+            val newRel = KnownRelation(a1.id, a2.id, m.title :: movies)
+            peopleToPeople.put((a1.id, a2.id), newRel)
+          }
+          else {
+            val newRel = KnownRelation(a1.id, a2.id, m.title :: Nil)
+            peopleToPeople.put((a1.id, a2.id), newRel)
+          }
+        }
+      }
+    }
+
+    // Iter on all relations and insert it
+    val addRelations = peopleToPeople.map {case (_, v) =>
+      actorService.addKnowsRelation(v.a1Id, v.a2Id, v.movies) // TODO: Methode addKnowsRelation à maliner
+    }
+
+    val fAddRel = Future.sequence(addRelations)
+    Await.result(fAddRel, Duration.Inf) // Wait for adding relations
+
+    //############################################################### j'ai guigné le code jusqu'ici
+
     val genresSet = mutable.Set[Genre]()
-    val peoplesMap = mutable.Map[Long, (SimplePeople, mutable.Set[String])]()
+    val peoplesMap = mutable.Map[Long, SimplePeople]()
     val moviesForPeople = mutable.Map[Long, List[MovieForPeople]]()
     val genresForPeople = mutable.Map[Long, List[GenreForPeople]]()
-    val peopleToPeople = mutable.Map[Long, List[Long]]()
+    // val peopleToPeople = mutable.Map[Long, List[Long]]()
 
-    def processPeople(p: People, m: Movie, genres: List[Genre]): Unit = {
+    def processPeople(p: People, m: Movie, genres: List[Genre]): Unit = { // TODO: On peut virer ca non ? (la partie mfp et genres je sais pas si tu veux garder)
       val (label, score) = p match {
         case actor: Actor => ("Actor", movieService.computeMovieScore(m) / (actor.order + 1).toDouble)
         case _ => ("MovieMaker", movieService.computeMovieScore(m) / movieMakerScoreDivisor)
@@ -98,11 +151,11 @@ object Main {
       }
     }
 
+
     // Third step, make maps for peoples and genres, to speed up making relations
     println(java.util.Calendar.getInstance.getTime + " Create maps from each movies")
     movies.foreach { m =>
       val actors = m.credits.cast
-      val movieMakers = m.credits.crew
       val genres = m.genres
 
       genres.foreach(g => genresSet.add(g))
