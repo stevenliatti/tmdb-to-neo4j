@@ -67,17 +67,17 @@ object Main {
     val rMovies = movieService.readMoviesFromFile("data/movies.json").toList
     val rActors= actorService.readActorsFromFile("data/actors.json").toList
 
+    val actorMap = mutable.Map[Long, Actor]()
+    rActors.foreach(a => { // Creat map of actors, for each id we have the corresponding actor
+      actorMap.put(a.id, a)
+    })
+
     val movies = rMovies.map(m => { // Filter actors with a order min in the movie
-      val actors = m.credits.cast.filter(a => a.order < actorsByMovie)
+      val actors = m.credits.cast.filter(a => actorMap.contains(a.id))
       val credits = Credits(actors)
       Movie(m.id, m.title, m.budget, m.revenue,
         m.genres, credits, m.backdrop_path, m.poster_path,
         m.production_countries, m.release_date, m.runtime, m.tagline)
-    })
-
-    val actorMap = mutable.Map[Long, Actor]()
-    rActors.foreach(a => { // Creat map of actors, for each id we have the corresponding actor
-      actorMap.put(a.id, a)
     })
 
     // Insert all actors in the database
