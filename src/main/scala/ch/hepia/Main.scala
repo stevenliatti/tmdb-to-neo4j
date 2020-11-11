@@ -114,25 +114,27 @@ object Main {
       Future.sequence(rActors.map(a => actorService.addActor(a)))
     Await.result(actorsInsertions, Duration.Inf)
 
-    case class KnownRelation(a1Id: Long, a2Id: Long, movies: List[String])
+    case class KnownRelation(a1Id: Long, a2Id: Long, movieIds: List[Long])
     val peopleToPeople = mutable.Map[(Long, Long), KnownRelation]()
+    val genresSet = mutable.Set[Genre]()
 
     movies.foreach { m =>
       val actors = m.credits.cast
-      val genres = m.genres // TODO : Que faire avec les genres ?
+      val genres = m.genres
+      genres.foreach(g => genresSet.add(g))
 
-      // Creat relations between actors by his ID
-      for { // TODO: Qu'en penses-tu ? => ca nous crée une map avec pour chaque know entre actor les id et la liste des films qui les lie
+      // Create relations between actors by his ID
+      for {
         a1 <- actors
         a2 <- actors
       } yield {
         if (a1.id != a2.id) {
           if (peopleToPeople.contains((a1.id, a2.id))) {
-            val movies: List[String] = peopleToPeople((a1.id, a2.id)).movies
-            val newRel = KnownRelation(a1.id, a2.id, m.title :: movies)
+            val movies: List[Long] = peopleToPeople((a1.id, a2.id)).movieIds
+            val newRel = KnownRelation(a1.id, a2.id, m.id :: movies)
             peopleToPeople.put((a1.id, a2.id), newRel)
           } else {
-            val newRel = KnownRelation(a1.id, a2.id, m.title :: Nil)
+            val newRel = KnownRelation(a1.id, a2.id, m.id :: Nil)
             peopleToPeople.put((a1.id, a2.id), newRel)
           }
         }
@@ -140,25 +142,39 @@ object Main {
     }
 
     // Iter on all relations and insert it
-    val addRelations = peopleToPeople.map {
+    val addRelations = peopleToPeople.flatMap {
       case (_, v) =>
-        actorService.addKnowsRelation(
-          v.a1Id,
-          v.a2Id,
-          v.movies
-        ) // TODO: Methode addKnowsRelation à maliner
+        v.movieIds.map(movieId => {
+          actorService.addKnowsRelation(
+            v.a1Id,
+            v.a2Id,
+            movieId
+          )
+        })
     }
 
+    val genresInsertions = Future.sequence(genresSet.map(g => movieService.addGenres(g)))
     val fAddRel = Future.sequence(addRelations)
+    Await.result(genresInsertions, Duration.Inf)
     Await.result(fAddRel, Duration.Inf) // Wait for adding relations
 
-    //############################################################### j'ai guigné le code jusqu'ici
-
-    val genresSet = mutable.Set[Genre]()
-    val peoplesMap = mutable.Map[Long, SimplePeople]()
-    val moviesForPeople = mutable.Map[Long, List[MovieForPeople]]()
-    val genresForPeople = mutable.Map[Long, List[GenreForPeople]]()
+    val moviesForActor = mutable.Map[Long, List[PlayInMovie]]()
+    val genresForActor = mutable.Map[Long, List[Genre]]()
     // val peopleToPeople = mutable.Map[Long, List[Long]]()
+
+    // TODO
+    // rActors.foreach(actor => {
+    //   val actorId = actor.id
+    //   val movies = actor.movie_credits
+
+    //   movies.foreach(movie => {
+    //     if ()
+    //   })
+
+    //   if (moviesForActor.contains(actorId)) {
+    //     moviesForActor.put(actorId, moviesForActor(actorId))
+    //   }
+    // })
 
     def processPeople(p: People, m: Movie, genres: List[Genre]): Unit = { // TODO: On peut virer ca non ? (la partie mfp et genres je sais pas si tu veux garder)
       val (label, score) = p match {
@@ -202,7 +218,6 @@ object Main {
       val actors = m.credits.cast
       val genres = m.genres
 
-      genres.foreach(g => genresSet.add(g))
       actors.foreach(a => processPeople(a, m, genres))
       movieMakers.foreach(mm => processPeople(mm, m, genres))
 
@@ -225,8 +240,6 @@ object Main {
     )
     val moviesInsertions =
       Future.sequence(movies.map(m => movieService.addMovie(m)))
-    val genresInsertions =
-      Future.sequence(genresSet.map(g => movieService.addGenres(g)))
     val peoplesInsertions = Future.sequence(peoplesMap.map {
       case (id, (sp, set)) =>
         val score =
@@ -237,7 +250,6 @@ object Main {
     })
 
     Await.result(moviesInsertions, Duration.Inf)
-    Await.result(genresInsertions, Duration.Inf)
     Await.result(peoplesInsertions, Duration.Inf)
 
     // Fifth step, add relations

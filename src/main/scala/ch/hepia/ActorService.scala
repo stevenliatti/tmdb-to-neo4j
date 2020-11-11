@@ -36,12 +36,12 @@ class ActorService(driver: Driver[Future]) {
   def addKnowsRelation(
       aId1: Long,
       aId2: Long,
-      movie: List[String]
+      movieId: Long
   ): Future[Unit] =
     driver.readSession { session =>
-      c"""MATCH (p1: People {id: $pId1})
-        MATCH (p2: People {id: $pId2})
-        MERGE (p1)-[r:KNOWS {count: $count}]-(p2)
+      c"""MATCH (a1: People {id: $aId1})
+        MATCH (a2: People {id: $aId2})
+        MERGE (a1)-[r:KNOWS {movieId: $movieId}]-(a2)
      """.query[Unit].execute(session)
     // En construction
     // 2 possibilités soit on passe par noeud movie intermediaire soit on store liste dans relation
