@@ -1,0 +1,99 @@
+// json parsing
+val rMovies = parseMovies
+val rActors = parseActors
+
+// create maps for fast access
+val actorsMap: Map[actorId, actor] = rActors.toMap(....)
+val moviesMap: Map[movieId, movie] = rMovies.foreach { movie =>
+    // foreach movie, keep only actors presents in actorsMap
+    movieActors = movie.actors.filter(in actorsMap)
+    movie.actors = movieActors
+    (movie.id, movie)
+}
+
+// track movie's genres, Genre node
+val genres: Set[Genre] = ......
+// map associating a movie's id to his actors list (PlayInMovie only), PLAY_IN relation
+val actorsInMovie: Map[Long, List[PlayInMovie]] = ......
+// map associating a movie's id to his genres list, BELONGS_TO relation
+val genresOfMovie: Map[Long, List[Genre]] = ......
+// map associating an actor's id to his genres. Count genres occurences, KNOWN_FOR relation
+val genresOfActor: Map[Long, Map[Genre, Int]] = ......
+
+class PairIds(first: Long, second: Long) { val pair: Set[Long] = (first, second) }
+// map associating an actors pair with a movie ids list, KNOWS relation
+val relationsBetweenTwoActors: Map[PairIds, List[Long]] = ......
+
+moviesMap.foreach { movie =>
+    val localMovieGenres: List[Genre] = .....
+    movie.genres.foreach { genre =>
+        genres.add(genre)
+        localMovieGenres.add(genre)
+        genresOfMovie.putAdd(movie.id, list.add(genre))
+    }
+    movie.actors.foreach { actor =>
+        actorsInMovie.putAdd(movie.id, list.add(PlayInMovie(actor.id, actor.character, actor.order)))
+        localMovieGenres.foreach { genre =>
+            genresOfActor.putAdd(actor.id, putAdd(genre.id, count++))
+        }
+    }
+}
+
+actorsInMovie.foreach { case (movieId, actors) =>
+    for {
+        a1 <- actors
+        a2 <- actors
+    } yield {
+        if (a1.id != a2.id) {
+            relationsBetweenTwoActors.putAdd(new PairIds(a1.id, a2.id), list.add(movieId))
+        }
+    }
+}
+
+
+
+// --------- Start futures HERE
+
+// Neo4j nodes insertion
+
+// insert genres nodes
+genres.foreach { genre =>
+    insertInNeo4j(genre)
+}
+// insert actors (without movies, done later in relations)
+actorsMap.foreach { actor =>
+    val actorWhithoutMovies = ....
+    insertInNeo4j(actorWhithoutMovies)
+}
+// insert movies (without genres and actors, done later in relations)
+moviesMap.foreach { movie =>
+    val movieWhithoutGenresActors = ....
+    insertInNeo4j(movieWhithoutGenresActors)
+}
+
+
+// Neo4j relations making of
+
+// PLAY_IN relation
+actorsInMovie.foreach { case(movieId, actors) =>
+    actors.foreach { actor =>
+        playIn(actor.id, movieId)
+    }
+}
+// BELONGS_TO relation
+genresOfMovie.foreach { case(movieId, genres) =>
+    belongsTo(movieId, genre.id)
+}
+// KNOWN_FOR relation
+genresOfActor.foreach { case(actorId, genres) =>
+    knownFor(actorId, genre.id)
+}
+// KNOWS relation
+relationsBetweenTwoActors.foreach { case(pair, movieIds) =>
+    movieIds.foreach { movieId => 
+        knows(pair.first, pair.second, movieId)
+    }
+}
+
+
+// --------- Wait on futures HERE

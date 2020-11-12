@@ -1,7 +1,7 @@
 /**
-  * Movie Score Parser
+  * TMDb to Neo4j Parser
   * From JSON movies data, create Neo4j database with nodes
-  * and relationships between Movies, Peoples and Genres
+  * and relationships between Movies, Actors and Genres
   * Jeremy Favre & Steven Liatti
   */
 
@@ -12,22 +12,8 @@ package ch.hepia
   * the different entities
   */
 object Domain {
-
-  trait People {
-    def id: Long
-    def name: String
-    def gender: Int
-
-    def intToGender(): String =
-      gender match {
-        case 1 => "Female"
-        case 2 => "Male"
-        case _ => "Undefined"
-      }
-  }
-
-  case class Credits(cast: List[PlayInMovie])
   case class PlayInMovie(id: Long, character: String, order: Int)
+  case class Credits(cast: List[PlayInMovie])
 
   case class Actor(
       id: Long,
@@ -39,12 +25,20 @@ object Domain {
       place_of_birth: Option[String],
       profile_path: Option[String],
       movie_credits: Credits
-  ) extends People
+  ) {
+    def intToGender(): String =
+      gender match {
+        case 1 => "Female"
+        case 2 => "Male"
+        case _ => "Undefined"
+      }
+  }
 
   case class ProductionCountries(iso_3166_1: String, name: String)
   case class Movie(
       id: Long,
       title: String,
+      overview: String,
       budget: Long,
       revenue: Long,
       genres: List[Genre],
@@ -59,7 +53,7 @@ object Domain {
 
   case class Genre(id: Long, name: String)
 
-  case class SimplePeople(id: Long, name: String, gender: String)
-  case class MovieForActor(movieId: Long, actor: PlayInMovie)
-  case class GenreForPeople(genreId: Long, people: People)
+  // case class SimplePeople(id: Long, name: String, gender: String)
+  // case class MovieForActor(movieId: Long, actor: PlayInMovie)
+  // case class GenreForPeople(genreId: Long, people: People)
 }

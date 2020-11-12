@@ -23,20 +23,6 @@ import scala.concurrent.{Await, Future}
   */
 object Main {
   def main(args: Array[String]): Unit = {
-    val actorsByMovie = if (args.length > 0) args(0).toInt else 30
-    println(s"$actorsByMovie actorsByMovie")
-    val jobsForMovie = List(
-      "Director",
-      "Writer",
-      "Screenplay",
-      "Producer",
-      "Director of Photography",
-      "Editor",
-      "Composer",
-      "Special Effects"
-    )
-    val movieMakerScoreDivisor = 2.0
-
     val neo4jConfig = Config
       .build()
       .withEncryption()
@@ -62,37 +48,43 @@ object Main {
         println("You have to define env variables")
         sys.exit(42)
     }
-    //////////////////////////////////////////############################## Depuis ici
 
+    val insertionService = new InsertionService(driver.asScala[Future])
+    def getTime = java.util.Calendar.getInstance.getTime();
+
+    // ------------------------------------------------------------------------
     // First step, create constraints on Nodes types
-    val movieService = new MovieService(driver.asScala[Future])
-    val actorService = new ActorService(driver.asScala[Future])
+    println(getTime + " Create constraints")
+    insertionService.createConstraints()
 
-    println(java.util.Calendar.getInstance.getTime + " Create constraints")
-    movieService.createConstraints()
-    actorService.createConstraints()
-
+    // ------------------------------------------------------------------------
     // Second step, read movies from raw JSON data and keep just the necessary
     println(
-      java.util.Calendar.getInstance.getTime + " Read movies in JSON and make filters"
+      getTime + " Read movies in JSON and make filters"
     )
-    val rMovies = movieService.readMoviesFromFile("data/movies.json").toList
-    val rActors = actorService.readActorsFromFile("data/actors.json").toList
+    val rMovies = insertionService.readMoviesFromFile("data/movies.json").toList
+    val rActors = insertionService.readActorsFromFile("data/actors.json").toList
 
-    val actorMap = mutable.Map[Long, Actor]()
+    // ------------------------------------------------------------------------
+    // Third step, create maps and sets for fast access
+    println(
+      getTime + " Make maps and sets for fast access"
+    )
+    val actorsMap = mutable.Map[Long, Actor]()
     rActors.foreach(
-      a => { // Creat map of actors, for each id we have the corresponding actor
-        actorMap.put(a.id, a)
-      }
+      a =>
+        { // Create map of actors, for each id we have the corresponding actor
+          actorsMap.put(a.id, a)
+        }
     )
-
-    val movies =
-      rMovies.map(m => { // Filter actors with a order min in the movie
-        val actors = m.credits.cast.filter(a => actorMap.contains(a.id))
+    val moviesMap =
+      rMovies.map(m => {
+        val actors = m.credits.cast.filter(a => actorsMap.contains(a.id))
         val credits = Credits(actors)
         Movie(
           m.id,
           m.title,
+          m.overview,
           m.budget,
           m.revenue,
           m.genres,
@@ -106,17 +98,50 @@ object Main {
         )
       })
 
-    // Insert all actors in the database
+    // track movie's genres, Genre node
+    val genresSet = mutable.Set[Genre]()
+    // map associating a movie's id to his actors list (PlayInMovie only), PLAY_IN relation
+    val actorsInMovie = mutable.Map[Long, List[PlayInMovie]]()
+    // map associating a movie's id to his genres list, BELONGS_TO relation
+    val genresOfMovie = mutable.Map[Long, List[Genre]]()
+    // map associating an actor's id to his genres. Count genres occurences, KNOWN_FOR relation
+    val genresOfActor = Map[Long, Map[Genre, Int]]()
+
+    class PairIds(one: Long, another: Long) {
+      val pair: Set[Long] = Set.apply(one, another)
+
+      override def equals(obj: Any): Boolean = obj match {
+        case that: PairIds => pair == that.pair
+        case _ => false
+      }
+    }
+    // map associating an actors pair with a movie ids list, KNOWS relation
+    val relationsBetweenTwoActors = Map[PairIds, List[Long]]()
+
+    moviesMap.foreach { movie =>
+        val localMovieGenres = mutable.Set[Genre]()
+        movie.genres.foreach { genre =>
+            genresSet.add(genre)
+            localMovieGenres.add(genre)
+            // genresOfMovie.putAdd(movie.id, list.add(genre))
+        }
+        // movie.actors.foreach { actor =>
+        //     actorsInMovie.putAdd(movie.id, list.add(PlayInMovie(actor.id, actor.character, actor.order)))
+        //     localMovieGenres.foreach { genre =>
+        //         genresOfActor.putAdd(actor.id, putAdd(genre.id, count++))
+        //     }
+        // }
+    }
+
+    // Fourth step,
     println(
-      java.util.Calendar.getInstance.getTime + " Start to add actors nodes"
+      getTime + " Start to add actors nodes"
     )
-    val actorsInsertions =
-      Future.sequence(rActors.map(a => actorService.addActor(a)))
+    val actorsInsertions = Future.sequence(rActors.map(a => actorService.addActor(a)))
     Await.result(actorsInsertions, Duration.Inf)
 
     case class KnownRelation(a1Id: Long, a2Id: Long, movieIds: List[Long])
     val peopleToPeople = mutable.Map[(Long, Long), KnownRelation]()
-    val genresSet = mutable.Set[Genre]()
 
     movies.foreach { m =>
       val actors = m.credits.cast
@@ -153,7 +178,8 @@ object Main {
         })
     }
 
-    val genresInsertions = Future.sequence(genresSet.map(g => movieService.addGenres(g)))
+    val genresInsertions =
+      Future.sequence(genresSet.map(g => movieService.addGenres(g)))
     val fAddRel = Future.sequence(addRelations)
     Await.result(genresInsertions, Duration.Inf)
     Await.result(fAddRel, Duration.Inf) // Wait for adding relations
@@ -212,7 +238,7 @@ object Main {
 
     // Third step, make maps for peoples and genres, to speed up making relations
     println(
-      java.util.Calendar.getInstance.getTime + " Create maps from each movies"
+      getTime + " Create maps from each movies"
     )
     movies.foreach { m =>
       val actors = m.credits.cast
@@ -236,7 +262,7 @@ object Main {
 
     // Fourth step, add all nodes in neo4j
     println(
-      java.util.Calendar.getInstance.getTime + " Start to add movies, genres and peoples nodes"
+      getTime + " Start to add movies, genres and peoples nodes"
     )
     val moviesInsertions =
       Future.sequence(movies.map(m => movieService.addMovie(m)))
@@ -254,7 +280,7 @@ object Main {
 
     // Fifth step, add relations
     println(
-      java.util.Calendar.getInstance.getTime + " Start to make relations between all nodes"
+      getTime + " Start to make relations between all nodes"
     )
     // Add similar movies for each movie
     val similar = for {
@@ -280,15 +306,15 @@ object Main {
 
     Await.result(fSimilar, Duration.Inf)
     println(
-      java.util.Calendar.getInstance.getTime + " Similar relations for movies added"
+      getTime + " Similar relations for movies added"
     )
     Await.result(fRecommendations, Duration.Inf)
     println(
-      java.util.Calendar.getInstance.getTime + " Recommended relations for movies added"
+      getTime + " Recommended relations for movies added"
     )
     Await.result(fMoviesGenres, Duration.Inf)
     println(
-      java.util.Calendar.getInstance.getTime + " Genres relations for movies added"
+      getTime + " Genres relations for movies added"
     )
 
     // Add add "in" relation between each people and movie
@@ -300,7 +326,7 @@ object Main {
     val fPeoplesMovies = Future.sequence(peoplesMovies)
     Await.result(fPeoplesMovies, Duration.Inf)
     println(
-      java.util.Calendar.getInstance.getTime + " Movies relations for peoples added"
+      getTime + " Movies relations for peoples added"
     )
 
     val knownForRelations = genresForPeople.map {
@@ -338,7 +364,7 @@ object Main {
       Await.result(f, Duration.Inf)
     }
     println(
-      java.util.Calendar.getInstance.getTime + " Genres acting relations for peoples added"
+      getTime + " Genres acting relations for peoples added"
     )
 
     // Add working for each people
@@ -350,7 +376,7 @@ object Main {
       Await.result(f, Duration.Inf)
     }
     println(
-      java.util.Calendar.getInstance.getTime + " Genres working relations for peoples added"
+      getTime + " Genres working relations for peoples added"
     )
 
     // Add knows between each people
@@ -369,7 +395,7 @@ object Main {
       Await.result(f, Duration.Inf)
     }
     println(
-      java.util.Calendar.getInstance.getTime + " Knows relations for peoples added"
+      getTime + " Knows relations for peoples added"
     )
 
     // Sixth step, run some algorithms on all data
@@ -380,10 +406,10 @@ object Main {
     Await.result(algorithmService.communities(), Duration.Inf)
     Await.result(algorithmService.similarities(), Duration.Inf)
     println(
-      java.util.Calendar.getInstance.getTime + " Compute some algorithms done"
+      getTime + " Compute some algorithms done"
     )
 
     driver.close()
-    println(java.util.Calendar.getInstance.getTime + " End of main")
+    println(getTime + " End of main")
   }
 }
