@@ -72,6 +72,8 @@ moviesMap.foreach { movie =>
 }
 
 
+// ----------- WAIT on nodes
+
 // Neo4j relations making of
 
 // PLAY_IN relation
