@@ -9,29 +9,23 @@ package ch.hepia
 
 import java.util.concurrent.TimeUnit
 
-import ch.hepia.Domain._
-import neotypes.implicits._
-import org.neo4j.driver.v1.{AuthTokens, Config, GraphDatabase}
-
 import scala.collection.mutable
+import scala.concurrent.Await
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Future
 import scala.concurrent.duration.Duration
-import scala.concurrent.{Await, Future}
+
+import ch.hepia.Domain._
+import neotypes.Driver
+import neotypes.GraphDatabase
+import neotypes.implicits._
+import org.neo4j.driver.AuthTokens
 
 /**
   * Program entry point
   */
 object Main {
   def main(args: Array[String]): Unit = {
-    val neo4jConfig = Config
-      .build()
-      .withEncryption()
-      .withConnectionTimeout(60, TimeUnit.SECONDS)
-      .withMaxConnectionLifetime(2, TimeUnit.HOURS)
-      .withMaxConnectionPoolSize(200)
-      .withConnectionAcquisitionTimeout(48, TimeUnit.HOURS)
-      .toConfig
-
     val (neo4jHost, neo4jUser, neo4jPassword) = (
       sys.env.get("NEO4J_HOST"),
       sys.env.get("NEO4J_USER"),
@@ -41,15 +35,14 @@ object Main {
       case (Some(host), Some(user), Some(password)) =>
         GraphDatabase.driver(
           host,
-          AuthTokens.basic(user, password),
-          neo4jConfig
+          AuthTokens.basic(user, password)
         )
       case _ =>
         println("You have to define env variables")
         sys.exit(42)
     }
 
-    val insertionService = new InsertionService(driver.asScala[Future])
+    val insertionService = new InsertionService(driver)
     def getTime = java.util.Calendar.getInstance.getTime()
 
     // ------------------------------------------------------------------------
@@ -62,8 +55,10 @@ object Main {
     println(
       getTime + " Second step, read movies in JSON and make filters"
     )
-    val rMovies = insertionService.readMoviesFromFile("data/movies.json").toList
-    val rActors = insertionService.readActorsFromFile("data/actors.json").toList
+    val rMovies =
+      insertionService.readMoviesFromFile("data/sub_movies.json").toList
+    val rActors =
+      insertionService.readActorsFromFile("data/sub_actors.json").toList
 
     // ------------------------------------------------------------------------
     // Third step, create maps and sets for fast access
@@ -166,7 +161,7 @@ object Main {
     )
     // insert genres nodes
     val gnf =
-      Future.sequence(genresSet.map(genre => insertionService.addGenres(genre)))
+      Future.sequence(genresSet.map(genre => insertionService.addGenre(genre)))
     // insert actors (without movies, done later in relations)
     val anf = Future.sequence(actorsMap.map {
       case (id, actor) => insertionService.addActor(actor)
@@ -220,19 +215,20 @@ object Main {
     Await.result(belongsTo, Duration.Inf)
     Await.result(knows, Duration.Inf)
 
+    // TODO check algos, to do or not ?
     // ------------------------------------------------------------------------
     // Sixth step, run some algorithms on all data
-    println(
-      getTime + " Sixth step, run some algorithms on all data"
-    )
-    val algorithmService = new AlgorithmService(driver.asScala[Future])
+    // println(
+    //   getTime + " Sixth step, run some algorithms on all data"
+    // )
+    // val algorithmService = new AlgorithmService(driver)
     // Await.result(algorithmService.pagerank(), Duration.Inf)
-    Await.result(algorithmService.centrality(), Duration.Inf)
-    Await.result(algorithmService.genreDegree(), Duration.Inf)
+    // Await.result(algorithmService.actorDegree(), Duration.Inf)
+    // Await.result(algorithmService.genreDegree(), Duration.Inf)
     // Await.result(algorithmService.communities(), Duration.Inf)
-    Await.result(algorithmService.similarities(), Duration.Inf)
+    // Await.result(algorithmService.similarities(), Duration.Inf)
 
-    driver.close()
+    driver.close
     println(getTime + " End of main")
   }
 }

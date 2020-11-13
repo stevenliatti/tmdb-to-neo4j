@@ -7,11 +7,12 @@
 
 package ch.hepia
 
-import neotypes.Driver
-import neotypes.implicits._
-
-import scala.concurrent.duration.Duration
+import neotypes.GraphDatabase
+import neotypes.implicits.all._
 import scala.concurrent.{Await, Future}
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration._
+import neotypes.Driver
 
 /**
   * Service to execute Neo4j algorithms on added data
@@ -24,19 +25,11 @@ class AlgorithmService(driver: Driver[Future]) {
     * for centrality computation
     * @return
     */
-  def centrality(): Future[Unit] =
-    driver.readSession { session =>
+  def actorDegree(): Future[Unit] =
+    driver.writeSession { session =>
       c"""
-      CALL gds.alpha.degree.write({
-        nodeProjection: 'Actor',
-        relationshipProjection: {
-          KNOWS: {
-            type: 'KNOWS',
-            projection: 'REVERSE'
-          }
-        },
-        writeProperty: 'knowsDegree'
-      });
+      MATCH (a:Actor)
+      SET a.belongsToDegree = size((a)-[:KNOWS]-())
     """.query[Unit].execute(session)
     }
 
@@ -45,7 +38,7 @@ class AlgorithmService(driver: Driver[Future]) {
     * @return
     */
   def genreDegree(): Future[Unit] =
-    driver.readSession { session =>
+    driver.writeSession { session =>
       c"""
       MATCH (g:Genre)
       SET g.belongsToDegree = size((g)<-[:BELONGS_TO]-())
@@ -59,7 +52,7 @@ class AlgorithmService(driver: Driver[Future]) {
   //   * @return
   //   */
   // def communities(): Future[Unit] =
-  //   driver.readSession { session =>
+  //   driver.writeSession { session =>
   //     val a = c"""
   //     CALL gds.graph.create(
   //       'actor-knows-community-louvain-graph',
@@ -88,7 +81,7 @@ class AlgorithmService(driver: Driver[Future]) {
     * @return
     */
   def similarities(): Future[Unit] =
-    driver.readSession { session =>
+    driver.writeSession { session =>
       val a = c"""
       CALL gds.graph.create('movie-belongs-to-node-similar', ['Movie', 'Genre'], 'BELONGS_TO');
     """.query[Unit].execute(session)
