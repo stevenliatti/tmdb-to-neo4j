@@ -1,7 +1,7 @@
 /**
-  * Movie Score Parser
+  * TMDb to Neo4j Parser
   * From JSON movies data, create Neo4j database with nodes
-  * and relationships between Movies, Peoples and Genres
+  * and relationships between Movies, Actors and Genres
   * Jeremy Favre & Steven Liatti
   */
 
@@ -50,17 +50,17 @@ object Main {
     }
 
     val insertionService = new InsertionService(driver.asScala[Future])
-    def getTime = java.util.Calendar.getInstance.getTime();
+    def getTime = java.util.Calendar.getInstance.getTime()
 
     // ------------------------------------------------------------------------
     // First step, create constraints on Nodes types
-    println(getTime + " Create constraints")
+    println(getTime + " First step, create constraints on Nodes types")
     insertionService.createConstraints()
 
     // ------------------------------------------------------------------------
-    // Second step, read movies from raw JSON data and keep just the necessary
+    // Second step, read movies in JSON and make filters
     println(
-      getTime + " Read movies in JSON and make filters"
+      getTime + " Second step, read movies in JSON and make filters"
     )
     val rMovies = insertionService.readMoviesFromFile("data/movies.json").toList
     val rActors = insertionService.readActorsFromFile("data/actors.json").toList
@@ -68,7 +68,7 @@ object Main {
     // ------------------------------------------------------------------------
     // Third step, create maps and sets for fast access
     println(
-      getTime + " Make maps and sets for fast access"
+      getTime + " Third step, create maps and sets for fast access"
     )
     val actorsMap = mutable.Map[Long, Actor]()
     rActors.foreach(
@@ -148,285 +148,89 @@ object Main {
           a2 <- actors
         } yield {
           if (a1.id != a2.id) {
-            relationsBetweenTwoActors.put(new PairIds(a1.id, a2.id), list.add(movieId))
+            val pair = PairIds(a1.id, a2.id)
+            if (relationsBetweenTwoActors.contains(pair)) {
+              val actualMovies = relationsBetweenTwoActors(pair)
+              relationsBetweenTwoActors.put(pair, movieId :: actualMovies)
+            } else {
+              relationsBetweenTwoActors.put(pair, movieId :: Nil)
+            }
           }
         }
     }
-    // // Fourth step,
-    // println(
-    //   getTime + " Start to add actors nodes"
-    // )
-    // val actorsInsertions = Future.sequence(rActors.map(a => actorService.addActor(a)))
-    // Await.result(actorsInsertions, Duration.Inf)
 
-    // case class KnownRelation(a1Id: Long, a2Id: Long, movieIds: List[Long])
-    // val peopleToPeople = mutable.Map[(Long, Long), KnownRelation]()
+    // ------------------------------------------------------------------------
+    // Fourth step, insert nodes in Neo4j
+    println(
+      getTime + " Fourth step, insert nodes in Neo4j"
+    )
+    // insert genres nodes
+    val gnf =
+      Future.sequence(genresSet.map(genre => insertionService.addGenres(genre)))
+    // insert actors (without movies, done later in relations)
+    val anf = Future.sequence(actorsMap.map {
+      case (id, actor) => insertionService.addActor(actor)
+    })
+    // insert movies (without genres and actors, done later in relations)
+    val mnf =
+      Future.sequence(moviesMap.map(movie => insertionService.addMovie(movie)))
 
-    // movies.foreach { m =>
-    //   val actors = m.credits.cast
-    //   val genres = m.genres
-    //   genres.foreach(g => genresSet.add(g))
+    Await.result(gnf, Duration.Inf)
+    Await.result(anf, Duration.Inf)
+    Await.result(mnf, Duration.Inf)
 
-    //   // Create relations between actors by his ID
-    //   for {
-    //     a1 <- actors
-    //     a2 <- actors
-    //   } yield {
-    //     if (a1.id != a2.id) {
-    //       if (peopleToPeople.contains((a1.id, a2.id))) {
-    //         val movies: List[Long] = peopleToPeople((a1.id, a2.id)).movieIds
-    //         val newRel = KnownRelation(a1.id, a2.id, m.id :: movies)
-    //         peopleToPeople.put((a1.id, a2.id), newRel)
-    //       } else {
-    //         val newRel = KnownRelation(a1.id, a2.id, m.id :: Nil)
-    //         peopleToPeople.put((a1.id, a2.id), newRel)
-    //       }
-    //     }
-    //   }
-    // }
+    // ------------------------------------------------------------------------
+    // Fifth step, insert relations in Neo4j
+    println(
+      getTime + " Fifth step, insert relations in Neo4j"
+    )
+    // PLAY_IN relation
+    val playIn = Future.sequence(actorsInMovie.flatMap {
+      case (movieId, actors) =>
+        actors.map { actor =>
+          insertionService.addPlayInRelation(actor, movieId)
+        }
+    })
+    // BELONGS_TO relation
+    val belongsTo = Future.sequence(genresOfMovie.flatMap {
+      case (movieId, genres) =>
+        genres.map(genre => insertionService.addMoviesGenres(movieId, genre.id))
+    })
+    // KNOWN_FOR relation
+    val knownFor = Future.sequence(genresOfActor.flatMap {
+      case (actorId, genres) =>
+        genres.map {
+          case (genre, count) =>
+            insertionService.addKnownForRelation(actorId, genre.id, count)
+        }
+    })
+    // // KNOWS relation
+    val knows = Future.sequence(relationsBetweenTwoActors.flatMap {
+      case (pairIds, movieIds) =>
+        movieIds.map(movieId =>
+          insertionService.addKnowsRelation(
+            pairIds.one,
+            pairIds.another,
+            movieId
+          )
+        )
+    })
 
-    // // Iter on all relations and insert it
-    // val addRelations = peopleToPeople.flatMap {
-    //   case (_, v) =>
-    //     v.movieIds.map(movieId => {
-    //       actorService.addKnowsRelation(
-    //         v.a1Id,
-    //         v.a2Id,
-    //         movieId
-    //       )
-    //     })
-    // }
+    Await.result(playIn, Duration.Inf)
+    Await.result(belongsTo, Duration.Inf)
+    Await.result(knows, Duration.Inf)
 
-    // val genresInsertions =
-    //   Future.sequence(genresSet.map(g => movieService.addGenres(g)))
-    // val fAddRel = Future.sequence(addRelations)
-    // Await.result(genresInsertions, Duration.Inf)
-    // Await.result(fAddRel, Duration.Inf) // Wait for adding relations
-
-    // val moviesForActor = mutable.Map[Long, List[PlayInMovie]]()
-    // val genresForActor = mutable.Map[Long, List[Genre]]()
-    // // val peopleToPeople = mutable.Map[Long, List[Long]]()
-
-    // // TODO
-    // // rActors.foreach(actor => {
-    // //   val actorId = actor.id
-    // //   val movies = actor.movie_credits
-
-    // //   movies.foreach(movie => {
-    // //     if ()
-    // //   })
-
-    // //   if (moviesForActor.contains(actorId)) {
-    // //     moviesForActor.put(actorId, moviesForActor(actorId))
-    // //   }
-    // // })
-
-    // def processPeople(p: People, m: Movie, genres: List[Genre]): Unit = { // TODO: On peut virer ca non ? (la partie mfp et genres je sais pas si tu veux garder)
-    //   val (label, score) = p match {
-    //     case actor: Actor =>
-    //       (
-    //         "Actor",
-    //         movieService.computeMovieScore(m) / (actor.order + 1).toDouble
-    //       )
-    //     case _ =>
-    //       (
-    //         "MovieMaker",
-    //         movieService.computeMovieScore(m) / movieMakerScoreDivisor
-    //       )
-    //   }
-
-    //   if (peoplesMap.contains(p.id)) peoplesMap(p.id)._2 += label
-    //   else {
-    //     val sp = SimplePeople(p.id, p.name, p.intToGender())
-    //     val set = mutable.Set(label)
-    //     peoplesMap.put(p.id, (sp, set))
-    //   }
-
-    //   val mfp = MovieForPeople(m.id, p, score)
-    //   if (moviesForPeople.contains(p.id))
-    //     moviesForPeople.put(p.id, mfp :: moviesForPeople(p.id))
-    //   else moviesForPeople.put(p.id, mfp :: Nil)
-
-    //   genres.foreach { g =>
-    //     val gfp = GenreForPeople(g.id, p)
-    //     if (genresForPeople.contains(p.id))
-    //       genresForPeople.put(p.id, gfp :: genresForPeople(p.id))
-    //     else genresForPeople.put(p.id, gfp :: Nil)
-    //   }
-    // }
-
-    // // Third step, make maps for peoples and genres, to speed up making relations
-    // println(
-    //   getTime + " Create maps from each movies"
-    // )
-    // movies.foreach { m =>
-    //   val actors = m.credits.cast
-    //   val genres = m.genres
-
-    //   actors.foreach(a => processPeople(a, m, genres))
-    //   movieMakers.foreach(mm => processPeople(mm, m, genres))
-
-    //   val people = actors ::: movieMakers
-    //   for {
-    //     p1 <- people
-    //     p2 <- people
-    //   } yield {
-    //     if (p1.id != p2.id) {
-    //       if (peopleToPeople.contains(p1.id))
-    //         peopleToPeople.put(p1.id, p2.id :: peopleToPeople(p1.id))
-    //       else peopleToPeople.put(p1.id, p2.id :: Nil)
-    //     }
-    //   }
-    // }
-
-    // // Fourth step, add all nodes in neo4j
-    // println(
-    //   getTime + " Start to add movies, genres and peoples nodes"
-    // )
-    // val moviesInsertions =
-    //   Future.sequence(movies.map(m => movieService.addMovie(m)))
-    // val peoplesInsertions = Future.sequence(peoplesMap.map {
-    //   case (id, (sp, set)) =>
-    //     val score =
-    //       moviesForPeople(id).map(mfp => mfp.score).sum / moviesForPeople(
-    //         id
-    //       ).length
-    //     movieService.addPeople(sp, score, set)
-    // })
-
-    // Await.result(moviesInsertions, Duration.Inf)
-    // Await.result(peoplesInsertions, Duration.Inf)
-
-    // // Fifth step, add relations
-    // println(
-    //   getTime + " Start to make relations between all nodes"
-    // )
-    // // Add similar movies for each movie
-    // val similar = for {
-    //   m1 <- movies
-    //   m2 <- m1.similar.getOrElse(Similar(Nil)).results
-    // } yield movieService.addSimilarRelation(m1, m2)
-
-    // // Add recommended movies for each movie
-    // val recommendations = for {
-    //   m1 <- movies
-    //   m2 <- m1.recommendations.getOrElse(Recommendations(Nil)).results
-    // } yield movieService.addRecommendationsRelation(m1, m2)
-
-    // // Add genres for each movie
-    // val moviesGenres = for {
-    //   m <- movies
-    //   g <- m.genres
-    // } yield movieService.addMoviesGenres(m, g)
-
-    // val fSimilar = Future.sequence(similar)
-    // val fRecommendations = Future.sequence(recommendations)
-    // val fMoviesGenres = Future.sequence(moviesGenres)
-
-    // Await.result(fSimilar, Duration.Inf)
-    // println(
-    //   getTime + " Similar relations for movies added"
-    // )
-    // Await.result(fRecommendations, Duration.Inf)
-    // println(
-    //   getTime + " Recommended relations for movies added"
-    // )
-    // Await.result(fMoviesGenres, Duration.Inf)
-    // println(
-    //   getTime + " Genres relations for movies added"
-    // )
-
-    // // Add add "in" relation between each people and movie
-    // val peoplesMovies = for {
-    //   (_, moviesList) <- moviesForPeople
-    //   m <- moviesList
-    // } yield movieService.addInMoviesRelation(m.people, m.movieId)
-
-    // val fPeoplesMovies = Future.sequence(peoplesMovies)
-    // Await.result(fPeoplesMovies, Duration.Inf)
-    // println(
-    //   getTime + " Movies relations for peoples added"
-    // )
-
-    // val knownForRelations = genresForPeople.map {
-    //   case (peopleId, gfpList) =>
-    //     def genresPeopleCount(
-    //         gfpList: List[GenreForPeople],
-    //         kind: People
-    //     ): Map[Long, (People, Int)] = {
-    //       val knownFor = kind match {
-    //         case _: Actor =>
-    //           gfpList.filter(gfp => gfp.people.isInstanceOf[Actor])
-    //         case _: MovieMaker =>
-    //           gfpList.filter(gfp => gfp.people.isInstanceOf[MovieMaker])
-    //       }
-    //       val genresFor = knownFor
-    //         .groupBy(gfp => gfp.genreId)
-    //         .map { case (l, peoples) => (l, peoples.map(p => p.people)) }
-    //       genresFor
-    //         .map { case (l, peoples) => (l, (peoples.head, peoples.length)) }
-    //     }
-
-    //     val a = Actor(1, "", 1, 1, "")
-    //     val mm = MovieMaker(1, "", 1, "")
-    //     val genresActingCount = genresPeopleCount(gfpList, a)
-    //     val genresWorkingCount = genresPeopleCount(gfpList, mm)
-    //     (peopleId, (genresActingCount, genresWorkingCount))
-    // }
-
-    // // Add acting for each people
-    // for {
-    //   (_, (genresActingCount, _)) <- knownForRelations
-    //   (genreId, (people, count)) <- genresActingCount
-    // } yield {
-    //   val f = movieService.addKnownForRelation(people, genreId, count)
-    //   Await.result(f, Duration.Inf)
-    // }
-    // println(
-    //   getTime + " Genres acting relations for peoples added"
-    // )
-
-    // // Add working for each people
-    // for {
-    //   (_, (_, genresWorkingCount)) <- knownForRelations
-    //   (genreId, (people, count)) <- genresWorkingCount
-    // } yield {
-    //   val f = movieService.addKnownForRelation(people, genreId, count)
-    //   Await.result(f, Duration.Inf)
-    // }
-    // println(
-    //   getTime + " Genres working relations for peoples added"
-    // )
-
-    // // Add knows between each people
-    // val knows = peopleToPeople.map {
-    //   case (peopleId, pIds) =>
-    //     val friendIdWithCount = pIds
-    //       .groupBy(i => i)
-    //       .map { case (l, longs) => (l, longs.length) }
-    //     (peopleId, friendIdWithCount)
-    // }
-    // for {
-    //   (p1, p2Count) <- knows
-    //   (p2, count) <- p2Count
-    // } yield {
-    //   val f = movieService.addKnowsRelation(p1, p2, count)
-    //   Await.result(f, Duration.Inf)
-    // }
-    // println(
-    //   getTime + " Knows relations for peoples added"
-    // )
-
-    // // Sixth step, run some algorithms on all data
-    // val algorithmService = new AlgorithmService(driver.asScala[Future])
+    // ------------------------------------------------------------------------
+    // Sixth step, run some algorithms on all data
+    println(
+      getTime + " Sixth step, run some algorithms on all data"
+    )
+    val algorithmService = new AlgorithmService(driver.asScala[Future])
     // Await.result(algorithmService.pagerank(), Duration.Inf)
-    // Await.result(algorithmService.centrality(), Duration.Inf)
-    // Await.result(algorithmService.genreDegree(), Duration.Inf)
+    Await.result(algorithmService.centrality(), Duration.Inf)
+    Await.result(algorithmService.genreDegree(), Duration.Inf)
     // Await.result(algorithmService.communities(), Duration.Inf)
-    // Await.result(algorithmService.similarities(), Duration.Inf)
-    // println(
-    //   getTime + " Compute some algorithms done"
-    // )
+    Await.result(algorithmService.similarities(), Duration.Inf)
 
     driver.close()
     println(getTime + " End of main")
