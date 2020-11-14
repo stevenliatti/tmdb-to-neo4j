@@ -51,14 +51,14 @@ object Main {
     insertionService.createConstraints()
 
     // ------------------------------------------------------------------------
-    // Second step, read movies in JSON and make filters
+    // Second step, read movies and actors in JSON and make filters
     println(
-      getTime + " Second step, read movies in JSON and make filters"
+      getTime + " Second step, read movies and actors in JSON and make filters"
     )
     val rMovies =
-      insertionService.readMoviesFromFile("data/sub_movies.json").toList
+      insertionService.readMoviesFromFile("data/movies.json").toList
     val rActors =
-      insertionService.readActorsFromFile("data/sub_actors.json").toList
+      insertionService.readActorsFromFile("data/actors.json").toList
 
     // ------------------------------------------------------------------------
     // Third step, create maps and sets for fast access
@@ -179,19 +179,27 @@ object Main {
     println(
       getTime + " Fifth step, insert relations in Neo4j"
     )
+
     // PLAY_IN relation
+    println(getTime + "\tPLAY_IN")
     val playIn = Future.sequence(actorsInMovie.flatMap {
       case (movieId, actors) =>
         actors.map { actor =>
           insertionService.addPlayInRelation(actor, movieId)
         }
     })
+    Await.result(playIn, Duration.Inf)
+
     // BELONGS_TO relation
+    println(getTime + "\tBELONGS_TO")
     val belongsTo = Future.sequence(genresOfMovie.flatMap {
       case (movieId, genres) =>
         genres.map(genre => insertionService.addMoviesGenres(movieId, genre.id))
     })
+    Await.result(belongsTo, Duration.Inf)
+
     // KNOWN_FOR relation
+    println(getTime + "\tKNOWN_FOR")
     val knownFor = Future.sequence(genresOfActor.flatMap {
       case (actorId, genres) =>
         genres.map {
@@ -199,21 +207,21 @@ object Main {
             insertionService.addKnownForRelation(actorId, genre.id, count)
         }
     })
-    // // KNOWS relation
-    val knows = Future.sequence(relationsBetweenTwoActors.flatMap {
-      case (pairIds, movieIds) =>
-        movieIds.map(movieId =>
-          insertionService.addKnowsRelation(
-            pairIds.one,
-            pairIds.another,
-            movieId
-          )
-        )
-    })
+    Await.result(knownFor, Duration.Inf)
 
-    Await.result(playIn, Duration.Inf)
-    Await.result(belongsTo, Duration.Inf)
-    Await.result(knows, Duration.Inf)
+    // KNOWS relation
+    println(getTime + "\tKNOWS")
+    for {
+      (pairIds, movieIds) <- relationsBetweenTwoActors
+      movieId <- movieIds
+    } yield {
+      val f = insertionService.addKnowsRelation(
+        pairIds.one,
+        pairIds.another,
+        movieId
+      )
+      Await.result(f, Duration.Inf)
+    }
 
     // TODO check algos, to do or not ?
     // ------------------------------------------------------------------------

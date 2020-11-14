@@ -7,10 +7,10 @@ run:
 show_env: .env
 	@cat .env
 
-run_jar: target/scala-2.12/parser-assembly-0.0.1.jar
+run_jar: target/scala-2.13/parser-assembly-0.0.1.jar
 	java -Xmx$(JVM_RAM) -jar $<
 
-target/scala-2.12/parser-assembly-0.0.1.jar: src/* project/build.properties project/plugins.sbt build.sbt
+target/scala-2.13/parser-assembly-0.0.1.jar: src/* project/build.properties project/plugins.sbt build.sbt
 	sbt compile && sbt assembly
 
 data/actors.json: data/actors.json.xz

@@ -12,7 +12,7 @@ package ch.hepia
   * the different entities
   */
 object Domain {
-  case class PlayInMovie(id: Long, character: String, order: Int)
+  case class PlayInMovie(id: Long, character: Option[String], order: Int)
   case class Credits(cast: List[PlayInMovie])
 
   case class Actor(
