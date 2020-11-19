@@ -12,5 +12,6 @@ mainClass := Some("ch.hepia.Main")
 libraryDependencies ++= Seq(
   "io.spray" %%  "spray-json" % "1.3.5",
   "org.neo4j.driver" % "neo4j-java-driver" % "4.1.1",
-  "com.dimafeng" %% "neotypes" % neotypesV
+  "com.dimafeng" %% "neotypes" % neotypesV,
+  "org.scala-lang.modules" %% "scala-parallel-collections" % "0.2.0"
 )

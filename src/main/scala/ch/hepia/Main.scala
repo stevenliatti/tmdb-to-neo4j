@@ -14,7 +14,7 @@ import scala.concurrent.Await
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 import scala.concurrent.duration.Duration
-
+import scala.collection.parallel.CollectionConverters._
 import ch.hepia.Domain._
 import neotypes.Driver
 import neotypes.GraphDatabase
@@ -242,7 +242,7 @@ object Main {
     // KNOWS relation
     println(getTime + "\tKNOWS")
     for {
-      (pairIds, movieIds) <- relationsBetweenTwoActors
+      (pairIds, movieIds) <- relationsBetweenTwoActors.par
       movieId <- movieIds
     } yield {
       val f = insertionService.addKnowsRelation(
