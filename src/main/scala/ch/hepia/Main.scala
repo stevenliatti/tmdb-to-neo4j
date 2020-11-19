@@ -95,11 +95,15 @@ object Main {
 
     // track movie's genres, Genre node
     val genresSet = mutable.Set[Genre]()
-    // map associating a movie's id to his actors list (PlayInMovie only), PLAY_IN relation
+    // track movie's productions countries, Country node
+    val countriesSet = mutable.Set[ProductionCountries]()
+    // map associating a movie's id to its production countries, PRODUCED_IN relation
+    val countriesOfMovie = mutable.Map[Long, List[ProductionCountries]]()
+    // map associating a movie's id to its actors list (PlayInMovie only), PLAY_IN relation
     val actorsInMovie = mutable.Map[Long, List[PlayInMovie]]()
-    // map associating a movie's id to his genres list, BELONGS_TO relation
+    // map associating a movie's id to its genres list, BELONGS_TO relation
     val genresOfMovie = mutable.Map[Long, List[Genre]]()
-    // map associating an actor's id to his genres. Count genres occurences, KNOWN_FOR relation
+    // map associating an actor's id to its genres. Count genres occurences, KNOWN_FOR relation
     val genresOfActor = mutable.Map[Long, mutable.Map[Genre, Int]]()
 
     case class PairIds(one: Long, another: Long) {
@@ -116,12 +120,26 @@ object Main {
 
     moviesMap.foreach { movie =>
       val localMovieGenres = mutable.Set[Genre]()
+      val localMovieCountries = mutable.Set[ProductionCountries]()
+
       movie.genres.foreach { genre =>
         genresSet.add(genre)
         localMovieGenres.add(genre)
       }
+
+      movie.production_countries match {
+        case Some(countries) =>
+          countries.foreach { country =>
+            countriesSet.add(country)
+            localMovieCountries.add(country)
+          }
+        case _ => ()
+      }
+
       genresOfMovie.put(movie.id, localMovieGenres.toList)
+      countriesOfMovie.put(movie.id, localMovieCountries.toList)
       actorsInMovie.put(movie.id, movie.credits.cast)
+
       movie.credits.cast.foreach { actor =>
         localMovieGenres.foreach { genre =>
           if (genresOfActor.get(actor.id).contains(genre)) {
@@ -162,6 +180,9 @@ object Main {
     // insert genres nodes
     val gnf =
       Future.sequence(genresSet.map(genre => insertionService.addGenre(genre)))
+    // insert countries nodes
+    val cnf =
+      Future.sequence(countriesSet.map(country => insertionService.addCountry(country)))
     // insert actors (without movies, done later in relations)
     val anf = Future.sequence(actorsMap.map {
       case (id, actor) => insertionService.addActor(actor)
@@ -171,6 +192,7 @@ object Main {
       Future.sequence(moviesMap.map(movie => insertionService.addMovie(movie)))
 
     Await.result(gnf, Duration.Inf)
+    Await.result(cnf, Duration.Inf)
     Await.result(anf, Duration.Inf)
     Await.result(mnf, Duration.Inf)
 
@@ -189,6 +211,14 @@ object Main {
         }
     })
     Await.result(playIn, Duration.Inf)
+
+    // PRODUCED_IN relation
+    println(getTime + "\tPRODUCED_IN")
+    val producedIn = Future.sequence(countriesOfMovie.flatMap {
+      case (movieId, countries) =>
+        countries.map(country => insertionService.addMoviesCountries(movieId, country.iso_3166_1))
+    })
+    Await.result(producedIn, Duration.Inf)
 
     // BELONGS_TO relation
     println(getTime + "\tBELONGS_TO")

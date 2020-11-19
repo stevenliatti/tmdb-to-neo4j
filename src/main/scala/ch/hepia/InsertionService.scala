@@ -34,14 +34,13 @@ class InsertionService(driver: Driver[Future]) {
         CREATE CONSTRAINT ON (m:Movie) ASSERT m.tmdbId IS UNIQUE;
         CREATE CONSTRAINT ON (g:Genre) ASSERT g.tmdbId IS UNIQUE;
         CREATE CONSTRAINT ON (a:Actor) ASSERT a.tmdbId IS UNIQUE;
+        CREATE CONSTRAINT ON (c:Country) ASSERT c.iso_3166_1 IS UNIQUE;
         CREATE INDEX ON :Movie(title);
         CREATE INDEX ON :Actor(name);
         CREATE INDEX ON :Genre(name);
     """.query[Unit].execute(session)
     }
 
-  // TODO check production_countries
-  // production_countries: ${movie.production_countries},
   def addMovie(movie: Movie): Future[Unit] =
     driver.writeSession { session =>
       c"""
@@ -56,6 +55,16 @@ class InsertionService(driver: Driver[Future]) {
           release_date: ${movie.release_date.getOrElse("")},
           runtime: ${movie.runtime.getOrElse(-1)},
           tagline: ${movie.tagline.getOrElse("")}
+        })
+      """.query[Unit].execute(session)
+    }
+
+  def addCountry(country: ProductionCountries): Future[Unit] =
+    driver.writeSession { session =>
+      c"""
+        CREATE (country: Country {
+          iso_3166_1: ${country.iso_3166_1},
+          name: ${country.name}
         })
       """.query[Unit].execute(session)
     }
@@ -127,6 +136,15 @@ class InsertionService(driver: Driver[Future]) {
         MATCH (m: Movie {tmdbId: ${movieId}})
         MATCH (g: Genre {tmdbId: ${genreId}})
         MERGE (m)-[r:BELONGS_TO]->(g)
+      """.query[Unit].execute(session)
+    }
+
+  def addMoviesCountries(movieId: Long, iso_3166_1: String): Future[Unit] =
+    driver.writeSession { session =>
+      c"""
+        MATCH (m: Movie {tmdbId: ${movieId}})
+        MATCH (c: Country {iso_3166_1: ${iso_3166_1}})
+        MERGE (m)-[r:PRODUCED_IN]->(c)
       """.query[Unit].execute(session)
     }
 
