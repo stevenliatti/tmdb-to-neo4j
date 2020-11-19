@@ -253,16 +253,15 @@ object Main {
       Await.result(f, Duration.Inf)
     }
 
-    // TODO check algos, to do or not ?
     // ------------------------------------------------------------------------
     // Sixth step, run some algorithms on all data
-    // println(
-    //   getTime + " Sixth step, run some algorithms on all data"
-    // )
-    // val algorithmService = new AlgorithmService(driver)
-    // Await.result(algorithmService.pagerank(), Duration.Inf)
-    // Await.result(algorithmService.actorDegree(), Duration.Inf)
-    // Await.result(algorithmService.genreDegree(), Duration.Inf)
+    println(
+      getTime + " Sixth step, run some algorithms on all data"
+    )
+    val algorithmService = new AlgorithmService(driver)
+    Await.result(algorithmService.actorDegree(), Duration.Inf)
+    Await.result(algorithmService.genreDegree(), Duration.Inf)
+    Await.result(algorithmService.countryDegree(), Duration.Inf)
     // Await.result(algorithmService.communities(), Duration.Inf)
     // Await.result(algorithmService.similarities(), Duration.Inf)
 
