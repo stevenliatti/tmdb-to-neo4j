@@ -52,8 +52,4 @@ object Domain {
   )
 
   case class Genre(id: Long, name: String)
-
-  // case class SimplePeople(id: Long, name: String, gender: String)
-  // case class MovieForActor(movieId: Long, actor: PlayInMovie)
-  // case class GenreForPeople(genreId: Long, people: People)
 }
