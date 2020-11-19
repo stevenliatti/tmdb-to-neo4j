@@ -100,7 +100,7 @@ class InsertionService(driver: Driver[Future]) {
       c"""
         MATCH (m: Movie {tmdbId: $movieId})
         MATCH (a: Actor {tmdbId: ${actor.id}})
-        MERGE (a)-[r:PLAY_IN {character: ${actor.character}, order: ${actor.order}]->(m)
+        MERGE (a)-[r:PLAY_IN {character: ${actor.character}, order: ${actor.order}}]->(m)
       """.query[Unit].execute(session)
     }
 
