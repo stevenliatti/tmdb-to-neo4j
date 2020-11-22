@@ -26,17 +26,9 @@ import org.neo4j.driver.AuthTokens
   */
 object Main {
   def main(args: Array[String]): Unit = {
-    val (neo4jHost, neo4jUser, neo4jPassword) = (
-      sys.env.get("NEO4J_HOST"),
-      sys.env.get("NEO4J_USER"),
-      sys.env.get("NEO4J_PASSWORD")
-    )
-    val driver = (neo4jHost, neo4jUser, neo4jPassword) match {
-      case (Some(host), Some(user), Some(password)) =>
-        GraphDatabase.driver(
-          host,
-          AuthTokens.basic(user, password)
-        )
+    val neo4jHost = sys.env.get("NEO4J_HOST")
+    val driver = neo4jHost match {
+      case Some(host) => GraphDatabase.driver(host)
       case _ =>
         println("You have to define env variables")
         sys.exit(42)
@@ -182,7 +174,9 @@ object Main {
       Future.sequence(genresSet.map(genre => insertionService.addGenre(genre)))
     // insert countries nodes
     val cnf =
-      Future.sequence(countriesSet.map(country => insertionService.addCountry(country)))
+      Future.sequence(
+        countriesSet.map(country => insertionService.addCountry(country))
+      )
     // insert actors (without movies, done later in relations)
     val anf = Future.sequence(actorsMap.map {
       case (id, actor) => insertionService.addActor(actor)
@@ -216,7 +210,9 @@ object Main {
     println(getTime + "\tPRODUCED_IN")
     val producedIn = Future.sequence(countriesOfMovie.flatMap {
       case (movieId, countries) =>
-        countries.map(country => insertionService.addMoviesCountries(movieId, country.iso_3166_1))
+        countries.map(country =>
+          insertionService.addMoviesCountries(movieId, country.iso_3166_1)
+        )
     })
     Await.result(producedIn, Duration.Inf)
 
@@ -238,6 +234,19 @@ object Main {
         }
     })
     Await.result(knownFor, Duration.Inf)
+
+    // KNOWS_COUNT relation
+    println(getTime + "\tKNOWS_COUNT")
+    val knowsCount = Future.sequence(for {
+      (pairIds, movieIds) <- relationsBetweenTwoActors
+    } yield {
+      insertionService.addKnowsCountRelation(
+        pairIds.one,
+        pairIds.another,
+        movieIds.length
+      )
+    })
+    Await.result(knowsCount, Duration.Inf)
 
     // KNOWS relation
     println(getTime + "\tKNOWS")

@@ -130,6 +130,19 @@ class InsertionService(driver: Driver[Future]) {
       """.query[Unit].execute(session)
     }
 
+  def addKnowsCountRelation(
+      aId1: Long,
+      aId2: Long,
+      count: Int
+  ): Future[Unit] =
+    driver.writeSession { session =>
+      c"""
+        MATCH (a1: Actor {tmdbId: $aId1})
+        MATCH (a2: Actor {tmdbId: $aId2})
+        MERGE (a1)-[r:KNOWS_COUNT {count: $count}]-(a2)
+      """.query[Unit].execute(session)
+    }
+
   def addMoviesGenres(movieId: Long, genreId: Long): Future[Unit] =
     driver.writeSession { session =>
       c"""

@@ -60,31 +60,34 @@ class AlgorithmService(driver: Driver[Future]) {
       """.query[Unit].execute(session)
     }
 
-  // /**
-  //   * Add community to actors
-  //   * @return
-  //   */
-  // def communities(): Future[Unit] =
-  //   driver.writeSession { session =>
-  //     val a = c"""
-  //     CALL gds.graph.create(
-  //       'actor-knows-community-louvain-graph',
-  //       'Actor',
-  //       {
-  //         KNOWS: {
-  //           orientation: 'UNDIRECTED'
-  //         }
-  //       }
-  //     );
-  //   """.query[Unit].execute(session)
-  //     Await.result(a, Duration.Inf)
-  //     c"""
-  //     CALL gds.louvain.write(
-  //       'actor-knows-community-louvain-graph',
-  //       { writeProperty: 'knowsCommunity' }
-  //     ) YIELD communityCount, modularity, modularities;
-  //   """.query[Unit].execute(session)
-  //   }
+  /**
+    * Add community to actors
+    * @return
+    */
+  def communities(): Future[Unit] =
+    driver.writeSession { session =>
+      val a = c"""
+      CALL gds.graph.create(
+        'actor-knows-community-louvain-graph',
+        'Actor',
+        {
+          KNOWS_COUNT: {
+            orientation: 'UNDIRECTED'
+          }
+        },
+        {
+          relationshipProperties: 'count'
+        }
+      );
+    """.query[Unit].execute(session)
+      Await.result(a, Duration.Inf)
+      c"""
+      CALL gds.louvain.write(
+        'actor-knows-community-louvain-graph',
+        { writeProperty: 'knowsCommunity' }
+      ) YIELD communityCount, modularity, modularities;
+    """.query[Unit].execute(session)
+    }
 
   // /**
   //   * Add relationships of similarity for movies and actors
