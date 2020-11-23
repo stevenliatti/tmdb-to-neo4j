@@ -237,16 +237,16 @@ object Main {
 
     // KNOWS_COUNT relation
     println(getTime + "\tKNOWS_COUNT")
-    val knowsCount = Future.sequence(for {
-      (pairIds, movieIds) <- relationsBetweenTwoActors
+    for {
+      (pairIds, movieIds) <- relationsBetweenTwoActors.par
     } yield {
-      insertionService.addKnowsCountRelation(
+      val f = insertionService.addKnowsCountRelation(
         pairIds.one,
         pairIds.another,
         movieIds.length
       )
-    })
-    Await.result(knowsCount, Duration.Inf)
+      Await.result(f, Duration.Inf)
+    }
 
     // KNOWS relation
     println(getTime + "\tKNOWS")
