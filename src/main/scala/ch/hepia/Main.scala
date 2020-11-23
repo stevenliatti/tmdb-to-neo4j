@@ -271,7 +271,7 @@ object Main {
     Await.result(algorithmService.actorDegree(), Duration.Inf)
     Await.result(algorithmService.genreDegree(), Duration.Inf)
     Await.result(algorithmService.countryDegree(), Duration.Inf)
-    // Await.result(algorithmService.communities(), Duration.Inf)
+    Await.result(algorithmService.communities(), Duration.Inf)
     // Await.result(algorithmService.similarities(), Duration.Inf)
 
     driver.close
