@@ -196,16 +196,6 @@ object Main {
       getTime + " Fifth step, insert relations in Neo4j"
     )
 
-    // PLAY_IN relation
-    println(getTime + "\tPLAY_IN")
-    val playIn = Future.sequence(actorsInMovie.flatMap {
-      case (movieId, actors) =>
-        actors.map { actor =>
-          insertionService.addPlayInRelation(actor, movieId)
-        }
-    })
-    Await.result(playIn, Duration.Inf)
-
     // PRODUCED_IN relation
     println(getTime + "\tPRODUCED_IN")
     val producedIn = Future.sequence(countriesOfMovie.flatMap {
@@ -234,6 +224,16 @@ object Main {
         }
     })
     Await.result(knownFor, Duration.Inf)
+
+    // PLAY_IN relation
+    println(getTime + "\tPLAY_IN")
+    actorsInMovie.par.flatMap {
+      case (movieId, actors) =>
+        actors.map { actor =>
+          val f = insertionService.addPlayInRelation(actor, movieId)
+          Await.result(f, Duration.Inf)
+        }
+    }
 
     // KNOWS_COUNT relation
     println(getTime + "\tKNOWS_COUNT")
