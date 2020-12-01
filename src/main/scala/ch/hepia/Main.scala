@@ -268,11 +268,8 @@ object Main {
       getTime + " Sixth step, run some algorithms on all data"
     )
     val algorithmService = new AlgorithmService(driver)
-    Await.result(algorithmService.actorDegree(), Duration.Inf)
-    Await.result(algorithmService.genreDegree(), Duration.Inf)
-    Await.result(algorithmService.countryDegree(), Duration.Inf)
+    Await.result(algorithmService.degrees(), Duration.Inf)
     Await.result(algorithmService.communities(), Duration.Inf)
-    // Await.result(algorithmService.similarities(), Duration.Inf)
 
     driver.close
     println(getTime + " End of main")

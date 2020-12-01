@@ -29,7 +29,7 @@ data:
 	mkdir -p data
 
 clean:
-	rm -rf target project/target project/project .metals .bloop
+	rm -rf *.jar target project/target project/project .metals .bloop project/.bloop
 
 neo4j: neo4j/plugins/neo4j-graph-data-science-1.4.0-standalone.jar
 	docker run --rm \
