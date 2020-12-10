@@ -11,7 +11,11 @@ Program reading the raw data in JSON from the TMDb collection and inserting them
 5. Added relationships between the nodes concerned from the collections created in 3.
 6. The chosen algorithms are executed on the whole inserted data set.
 
-Node and relationship insertions are done with the Neo4j query language, [Cypher](https://neo4j.com/developer/cypher-query-language/). As an example, below are two Scala methods for inserting an actor and for inserting a relation of an actor playing in a movie :
+Node and relationship insertions are done with the Neo4j query language, [Cypher](https://neo4j.com/developer/cypher-query-language/). Here you have the schema of nodes and relations created :
+
+![graph](graph.svg)
+
+As an example, below are two Scala methods for inserting an actor and for inserting a relation of an actor playing in a movie :
 
 ```scala
 def addActor(actor: Actor): Future[Unit] =
